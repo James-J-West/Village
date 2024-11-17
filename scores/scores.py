@@ -1,5 +1,8 @@
 import random
+import json
 
+with open('scores/scores_weights.json', "r") as f:
+    scores_json = json.load(f)
 
 def calculate_score(hand: list[tuple], trump: int, deck: list[tuple]):
     score = 0
@@ -9,27 +12,27 @@ def calculate_score(hand: list[tuple], trump: int, deck: list[tuple]):
         hand_copy = hand.copy()
         hand_copy.pop(hand_copy.index(card))
         if suit == trump:
-            trump_weight = 10
+            trump_weight = scores_json['trump_weight_present']
         else:
-            trump_weight = 2
+            trump_weight = scores_json['trump_weight_not']
 
         hand_copy_vals = sorted([val for suit, val in hand_copy])
         hand_copy_suits = [suit for suit, val in hand_copy]
         
         if value in hand_copy_vals:
-            dupe_val_weight = 10
+            dupe_val_weight = scores_json['dupe_val_weight_duped']
         else:
-            dupe_val_weight = 2
+            dupe_val_weight = scores_json['dupe_val_weight_single']
 
         if suit != trump:
             if value > hand_copy_vals[0] and suit in hand_copy_suits:
-                dupe_suit_weight = 10
+                dupe_suit_weight = scores_json['dupe_suit_weight_non_trump_high_Card']
             elif suit in hand_copy_suits:
-                dupe_suit_weight = 5
+                dupe_suit_weight = scores_json['dupe_suit_weight_non_trump']
             else:
-                dupe_suit_weight = 2
+                dupe_suit_weight = scores_json['dupe_suit_weight_no_dupe']
         else:
-                dupe_suit_weight = 2
+            dupe_suit_weight = 1
 
         card_score = dupe_suit_weight * dupe_val_weight * trump_weight * value
         
