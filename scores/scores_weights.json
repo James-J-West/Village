@@ -1,10 +1,10 @@
 {
-    "trump_weight_present": 10,
-    "trump_weight_not": 2,
-    "dupe_val_weight_duped": 10,
-    "dupe_val_weight_single": 2,
-    "dupe_suit_weight_trump": 10,
-    "dupe_suit_weight_non_trump": 5,
-    "dupe_suit_weight_no_dupe": 2,
-    "dupe_suit_weight_non_trump_high_Card": 5
+    "trump_weight_present": 1,
+    "trump_weight_not": 0.5,
+    "dupe_val_weight_duped": 1,
+    "dupe_val_weight_single": 0.5,
+    "dupe_suit_weight_trump": 0.2,
+    "dupe_suit_weight_non_trump": 1,
+    "dupe_suit_weight_no_dupe": 0.5,
+    "dupe_suit_weight_non_trump_high_Card": 1
 }

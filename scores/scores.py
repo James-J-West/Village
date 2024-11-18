@@ -6,39 +6,59 @@ with open('scores/scores_weights.json', "r") as f:
 
 def calculate_score(hand: list[tuple], trump: int, deck: list[tuple]):
     score = 0
+    num_trumps = sum(1 for card in hand if card[0] == trump)
+    trump_bonus = scores_json.get('trump_bonus', 1.1) ** num_trumps
+
     for card in hand:
         value = card[1]
         suit = card[0]
-        hand_copy = hand.copy()
-        hand_copy.pop(hand_copy.index(card))
+        
+        # Determine trump weight
         if suit == trump:
             trump_weight = scores_json['trump_weight_present']
         else:
             trump_weight = scores_json['trump_weight_not']
-
-        hand_copy_vals = sorted([val for suit, val in hand_copy])
-        hand_copy_suits = [suit for suit, val in hand_copy]
         
-        if value in hand_copy_vals:
+        # Duplicate value weight
+        value_count = sum(1 for c in hand if c[1] == value)
+        if value_count > 1:
             dupe_val_weight = scores_json['dupe_val_weight_duped']
         else:
             dupe_val_weight = scores_json['dupe_val_weight_single']
-
+        
+        # High card weight (higher value cards receive more weight)
+        high_card_weight = value / max(card[1] for card in deck)  # Normalize by highest card value in the deck
+        
+        # Suit duplication weight
+        suit_count = sum(1 for c in hand if c[0] == suit)
         if suit != trump:
-            if value > hand_copy_vals[0] and suit in hand_copy_suits:
+            highest_same_suit = max((c[1] for c in hand if c[0] == suit and c != card), default=-1)
+            if value > highest_same_suit and suit_count > 1:
                 dupe_suit_weight = scores_json['dupe_suit_weight_non_trump_high_Card']
-            elif suit in hand_copy_suits:
+            elif suit_count > 1:
                 dupe_suit_weight = scores_json['dupe_suit_weight_non_trump']
             else:
                 dupe_suit_weight = scores_json['dupe_suit_weight_no_dupe']
         else:
             dupe_suit_weight = 1
 
-        card_score = dupe_suit_weight * dupe_val_weight * trump_weight * value
+        # Calculate card score using all the weights
+        card_score = (
+            trump_weight *
+            dupe_val_weight *
+            high_card_weight *
+            dupe_suit_weight *
+            value
+        )
         
         score += card_score
 
+    # Apply overall trump bonus to the final score
+    score *= trump_bonus
+
     return score
+
+
 
 def draw_cards(deck:list[tuple], num_cards: int):
     """Draws a specified number of cards from the deck."""
