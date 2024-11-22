@@ -1,239 +1,147 @@
-import random
-from typing import List, Tuple, Optional, Dict, Union, FrozenSet
+from itertools import combinations
+import copy
+import json
+import uuid
 
+class Player:
+    def __init__(self, player_id: int, hand: list[tuple[int, int]], role: str):
+        self.player_id = player_id
+        self.hand = hand
+        self.role = role
 
-class TreeNode:
-    """
-    A class representing a node in a tree structure.
+    def __str__(self):
+        return f"Player(id={self.player_id}, role={self.role}, hand={self.hand})"
 
-    Attributes:
-        data (dict): The data stored in this node.
-        children (list[TreeNode]): A list of children nodes.
-        parent (Optional[TreeNode]): The parent node, if any.
-        score (int): The score of the node based on the hand.
-    """
-    def __init__(self, data: dict):
-        self.data: dict = data
-        self.children: List['TreeNode'] = []
-        self.parent: Optional['TreeNode'] = None
-        self.score: int = self.calculate_score()
+player_1 = Player(1, [(1, 4), (2, 4), (3, 4), (4, 4), (4, 10), (2, 11), (3, 13)], role="attacking")
+player_2 = Player(2, [(3, 14)], role="defending")
 
-    def add_child(self, child: 'TreeNode') -> None:
-        """Adds a child node to this node if it is not a duplicate."""
-        if not isinstance(child, TreeNode):
-            raise ValueError("Child must be an instance of TreeNode")
-        if not any(existing_child.data == child.data for existing_child in self.children):
-            child.parent = self
-            self.children.append(child)
+def is_valid_defence(attacking_card: tuple[int, int], defending_card: tuple[int, int], trump: int) -> bool:
+    if defending_card[0] == attacking_card[0]:
+        if defending_card[1] > attacking_card[1]:  # Changed to strictly greater than
+            return True
+    elif defending_card[0] == trump and (attacking_card[0] != trump):
+        return True
+    else:
+        return False
 
-    def calculate_score(self) -> float:
-        """Calculates the score of the node based on the hand with multiple factors."""
-        hand = self.data.get('hand', [])
-        trump = self.data.get('trump', None)
-        rest_of_cards = self.data.get('rest_of_cards', [])
+class Turn:
+    def __init__(self, attacker: Player, defender: Player, trump: int, parent=None, turn_number=0):
+        self.attacker = copy.deepcopy(attacker)
+        self.defender = copy.deepcopy(defender)
+        self.trump = trump
+        self.parent = parent
+        self.children = []
+        self.branch_id = str(uuid.uuid4())
+        self.turn_number = turn_number
 
-        score = 0
-        # Average card assumption after a defense (average value is 7, non-trump)
-        num_cards_needed = max(0, 5 - len(hand))
-        assumed_drawn_cards = [(0, 7)] * num_cards_needed
-        updated_hand = hand + assumed_drawn_cards
+    def get_attacks(self) -> list[list[tuple[int, int]]]:
+        value_to_cards = {}
+        # Group cards by their value
+        for card in self.attacker.hand:
+            value = card[1]
+            if value not in value_to_cards:
+                value_to_cards[value] = []
+            value_to_cards[value].append(card)
+        
+        valid_attacks = []
+        # Generate all possible combinations of cards with the same value
+        for cards in value_to_cards.values():
+            for i in range(1, len(cards) + 1):
+                valid_attacks.extend(list(combinations(cards, i)))
+        
+        return [list(attack) for attack in valid_attacks]
+    
+    def get_defenses(self, attacking_cards: list[tuple[int, int]]) -> list[tuple[int, int]] | None:
+        used_defending_cards = set()
+        defending_cards = []
+        for attacking_card in attacking_cards:
+            valid_defense_found = False
+            for card in self.defender.hand:
+                if card not in used_defending_cards and is_valid_defence(attacking_card, card, self.trump):
+                    defending_cards.append(card)
+                    used_defending_cards.add(card)
+                    valid_defense_found = True
+                    break
+            if not valid_defense_found:
+                return None
+        return defending_cards
 
-        # Penalize for having more than 5 cards, unless they are trump or high value
-        if len(updated_hand) > 5:
-            extra_cards = updated_hand[5:]
-            for card in extra_cards:
-                suit, value = card
-                if suit != trump and value <= 12:
-                    score -= 5  # Penalize for excess non-trump, low-value cards
+    def resolve_turn(self, attack: list[tuple[int, int]], defense: list[tuple[int, int]] | None):
+        if defense:
+            # Remove the defending cards from the defender's hand
+            self.defender.hand = [card for card in self.defender.hand if card not in defense]
+            # Remove the attacking cards from the attacker's hand
+            self.attacker.hand = [card for card in self.attacker.hand if card not in attack]
+            # Swap roles
+            self.attacker.role, self.defender.role = "defending", "attacking"
+            self.attacker, self.defender = self.defender, self.attacker
+        else:
+            # If defense is not possible, add the attacking cards to the defender's hand
+            self.defender.hand.extend(attack)
+            # Remove the attacking cards from the attacker's hand
+            self.attacker.hand = [card for card in self.attacker.hand if card not in attack]
 
-        for card in updated_hand:
-            suit, value = card
-
-            # Factor 1: Card value (prefer values above 7)
-            if value > 7:
-                card_value_weight = 1 + ((value - 7) / 7)  # Linearly increase weight for values > 7
-            else:
-                card_value_weight = 1 - ((7 - value) / 7)  # Linearly decrease weight for values < 7
-
-            # Factor 2: Trump cards are worth more
-            trump_weight = 10 if suit == trump else 1.2 if value > 7 else 5  # Favor trumps more if value > 7
-
-            # Factor 3: Multiples are good
-            same_value_count = sum(1 for c in updated_hand if c[1] == value)
-            multiple_weight = 2 if same_value_count >= 3 else 1.5 if same_value_count == 2 else 1
-
-            # Factor 4: How many cards this card can beat
-            if card == (0, 7):
-                beatable_count = 5
-            else:
-                beatable_count = sum(1 for c in rest_of_cards if (c[0] == suit and c[1] < value) or (c[0] != suit and suit == trump))
-            beatable_weight = (beatable_count / len(rest_of_cards) if rest_of_cards else 1) + 1  # Normalize and scale
-
-            # Calculate weighted score for the card
-            card_score = card_value_weight * trump_weight * multiple_weight * beatable_weight
-            score += card_score
-
-        return score
-
-
-    def __repr__(self, level=0) -> str:
-        """Provides a pretty string representation of the node."""
-        indent = "    " * level
-        repr_str = f"{indent}TreeNode(hand={self.data.get('hand', [])}, score={self.score}, cards_on_table={self.data.get('cards_on_table', [])})\n"
-        for child in self.children:
-            repr_str += child.__repr__(level + 1)
-        return repr_str
-
-
-class GameState:
-    """
-    A class for managing the state of the game.
-
-    Attributes:
-        deck (List[Tuple[int, int]]): The shuffled deck of cards.
-        trump (int): The trump suit.
-    """
-    def __init__(self):
-        self.suits = [1, 2, 3, 4]  # Suits represented by numbers
-        self.values = list(range(1, 14))
-        self.deck: List[Tuple[int, int]] = [(suit, value) for suit in self.suits for value in self.values]
-        random.shuffle(self.deck)
-        self.trump: int = random.choice(self.suits)
-
-    def draw_cards(self, num_cards: int) -> List[Tuple[int, int]]:
-        """Draws a specified number of cards from the deck."""
-        drawn_cards = []
-        for _ in range(num_cards):
-            if self.deck:  # Ensure cards are available
-                drawn_cards.append(self.deck.pop())
-        return drawn_cards
-
-    def draw_attacking_cards(self) -> List[Tuple[int, int]]:
-        """Draws a random number of cards of the same value from the deck to use as attacking cards."""
-        if not self.deck:
-            return []
-        # Randomly select a value from the rest of the deck
-        selected_card = random.choice(self.deck)
-        selected_value = selected_card[1]
-        # Find all cards with the same value
-        same_value_cards = [card for card in self.deck if card[1] == selected_value]
-        # Randomly select the number of cards to draw (between 1 and the total number of cards with that value)
-        num_to_draw = random.randint(1, len(same_value_cards))
-        attacking_cards = random.sample(same_value_cards, num_to_draw)
-        # Remove the selected cards from the deck
-        for card in attacking_cards:
-            self.deck.remove(card)
-        return attacking_cards
-
-
-def find_all_valid_defenses(attacking_cards: List[Tuple[int, int]], hand: List[Tuple[int, int]], trump: int) -> List[List[Tuple[int, int]]]:
-    """
-    Finds all possible valid defenses for the given attacking cards.
-
-    Args:
-        attacking_cards (List[Tuple[int, int]]): The attacking cards on the table.
-        hand (List[Tuple[int, int]]): The player's hand.
-        trump (int): The trump suit.
-
-    Returns:
-        List[List[Tuple[int, int]]]: A list of possible defenses, where each defense is a list of cards from the hand.
-    """
-    all_defenses = []
-
-    def find_defense(index: int, current_defense: List[Tuple[int, int]], used_cards: set):
-        if index == len(attacking_cards):
-            all_defenses.append(current_defense.copy())
+    def process_next_branch(self, all_branches: dict):
+        # Stop processing if either player has no cards left
+        if not self.attacker.hand or not self.defender.hand:
+            print("Game over.")
             return
+        
+        # Add the current branch to the collection
+        all_branches[self.branch_id] = self.to_dict()
+        
+        attacks = self.get_attacks()
+        for attack in attacks:
+            # Create deep copies of players for each branch
+            attacker_copy = copy.deepcopy(self.attacker)
+            defender_copy = copy.deepcopy(self.defender)
+            branch_turn = Turn(attacker_copy, defender_copy, self.trump, parent=self, turn_number=self.turn_number + 1)
+            print(f"Attack: {attack}")
+            defenses = branch_turn.get_defenses(attack)
+            if defenses:
+                print(f"Defense: {defenses}")
+            else:
+                print("Defense not possible")
+            branch_turn.resolve_turn(attack, defenses)
+            # Store only the branch ID of the child instead of the full child
+            self.children.append(branch_turn.branch_id)
+            # Add the child branch to the collection
+            all_branches[branch_turn.branch_id] = branch_turn.to_dict()
+            # Print Player 1 and Player 2 based on the IDs of the branch attackers and defenders
+            if branch_turn.attacker.player_id == 1:
+                print(f"Player 1: {branch_turn.attacker}")
+                print(f"Player 2: {branch_turn.defender}")
+            else:
+                print(f"Player 1: {branch_turn.defender}")
+                print(f"Player 2: {branch_turn.attacker}")
+            print("---")
+            # Recursively process the next branches
+            # branch_turn.process_next_branch(all_branches)
 
-        attack_suit, attack_value = attacking_cards[index]
-        # Adding logic for matching card values to keep all attacking cards OPEN
-        matching_cards = [card for card in hand if card[1] == attack_value and card not in used_cards]
-        if matching_cards:
-            used_cards.add(matching_cards[0])
-            current_defense.append(matching_cards[0])
-            all_defenses.append(current_defense.copy())
-            current_defense.pop()
-            used_cards.remove(matching_cards[0])
-
-        possible_defenses = [card for card in hand if card not in used_cards and (
-            (card[0] == attack_suit and card[1] > attack_value) or
-            (card[0] == trump and attack_suit != trump)
-        )]
-
-        for defense in possible_defenses:
-            if defense[0] == attack_suit and defense[1] <= attack_value and defense[0] != trump:
-                continue  # Skip invalid defense
-            used_cards.add(defense)
-            current_defense.append(defense)
-            find_defense(index + 1, current_defense, used_cards)
-            current_defense.pop()
-            used_cards.remove(defense)
-
-    find_defense(0, [], set())
-    return all_defenses
-
-
-def build_tree() -> TreeNode:
-    """
-    Builds the initial tree for the game state and generates possible defenses as children nodes.
-
-    Returns:
-        TreeNode: The root node of the tree.
-    """
-    game = GameState()
-    print(game.trump)
-    hand = game.draw_cards(5)
-    attacking_cards = game.draw_attacking_cards()
-    rest_of_cards = game.deck.copy()  # Remaining cards in the deck
-
-    # Update attacking cards to include state (OPEN or OPEN)
-    cards_on_table = [(card, 'OPEN') for card in attacking_cards]
-
-    root_data = {
-        'hand': hand,
-        'cards_on_table': cards_on_table,
-        'trump': game.trump,
-        'rest_of_cards': rest_of_cards
-    }
-    root = TreeNode(root_data)
-
-    # Create children nodes for each possible defense
-    all_valid_defenses = find_all_valid_defenses(attacking_cards, hand, game.trump)
-    for valid_defense in all_valid_defenses:
-        updated_cards_on_table = [
-            (card, 'DEFENDED') if card in attacking_cards else (card, card_state)
-            for card, card_state in cards_on_table
-        ]
-        updated_cards_on_table += [(card, 'OPEN') for card in valid_defense if card not in attacking_cards]
-
-        child_data = {
-            'hand': [card for card in hand if card not in valid_defense],
-            'cards_on_table': updated_cards_on_table,
-            'trump': game.trump,
-            'rest_of_cards': rest_of_cards
+    def to_dict(self):
+        return {
+            "branch_id": self.branch_id,
+            "turn_number": self.turn_number,
+            "attacker": {
+                "player_id": self.attacker.player_id,
+                "hand": self.attacker.hand,
+                "role": self.attacker.role
+            },
+            "defender": {
+                "player_id": self.defender.player_id,
+                "hand": self.defender.hand,
+                "role": self.defender.role
+            },
+            "children": self.children  # Store only the branch IDs of the children
         }
-        child_node = TreeNode(child_data)
-        root.add_child(child_node)
 
-    # Collapse the children to keep only the top 3 nodes with the best scores, without duplicates
-    if root.children:
-        unique_children = list({frozenset(tuple(card) for card in child.data['hand']): child for child in root.children}.values())
-        top_children = sorted(unique_children, key=lambda x: x.score, reverse=True)[:3]
-        root.children = top_children
+# Example usage
+initial_attacker = copy.deepcopy(player_1)
+initial_defender = copy.deepcopy(player_2)
+turn = Turn(initial_attacker, initial_defender, trump=4)
+all_branches = {}
+turn.process_next_branch(all_branches)
 
-    return root
-
-
-if __name__ == '__main__':
-    root = build_tree()
-    # Main loop to iterate through the tree nodes
-    current_nodes = [root]
-    level = 0
-    while current_nodes:
-        print(f"\nLevel {level}:")
-        next_nodes = []
-        for node in current_nodes:
-            print(node)
-            next_nodes.extend(node.children)
-        current_nodes = next_nodes
-        level += 1
+# Save the branches to a JSON file
+with open("branches.json", "w") as f:
+    json.dump(all_branches, f, indent=2)
