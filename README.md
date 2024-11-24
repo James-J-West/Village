@@ -1,2 +1,0 @@
-# Village
-Village Idiots
