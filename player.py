@@ -12,6 +12,10 @@ class Player:
             cards.append(deck.pop())
         self.add_hand(cards)
 
+    def extra_draw_card(self, num_cards: int, deck: list[tuple[int, str]]):
+        for _ in range(num_cards):
+            self.hand.append(deck.pop())
+
     def add_hand(self, hand: list[tuple[int, str]]):
         self.hand = hand
 
@@ -77,27 +81,28 @@ class Player:
             if card in self.hand:
                 self.hand.remove(card)
                 yield card
-
-
-
             
 
     def attack(self, trump_suit: str):
-
         non_trump_cards = [(value, suit) for value, suit in self.hand if suit != trump_suit]
         trump_cards = [(value, suit) for value, suit in self.hand if suit == trump_suit]
-        min_value_trump = min(trump_cards, key=lambda card: card[0])[0]
-    
-        if not non_trump_cards:
-            cards_to_play = [(value, suit) for value, suit in trump_cards if value == min_value_trump]
+
+        if trump_cards:
+            min_value_trump = min(trump_cards, key=lambda card: card[0])[0]
         else:
+            min_value_trump = None
+
+        if not non_trump_cards and trump_cards:
+            cards_to_play = [(value, suit) for value, suit in trump_cards if value == min_value_trump]
+        elif non_trump_cards:
             min_value = min(non_trump_cards, key=lambda card: card[0])[0]
             cards_to_play = [(value, suit) for value, suit in non_trump_cards if value == min_value]
-        
+        else:
+            cards_to_play = []
+
         for card in cards_to_play:
             self.hand.remove(card)
             yield card
-
 
 
 if __name__ == '__main__':
