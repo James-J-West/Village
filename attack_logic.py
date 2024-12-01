@@ -27,7 +27,6 @@ def find_attacking_cards(hand: list[str], trump_suit: str):
     hand.sort(key=lambda card: int(card.split('|')[0]) if card.split('|')[0].isdigit() else {'J': 11, 'Q': 12, 'K': 13, 'A': 14}[card.split('|')[0]])
 
 
-
     # Count the number of cards per suit
     suit_dict = {}
     for card in hand:
@@ -57,8 +56,9 @@ def find_attacking_cards(hand: list[str], trump_suit: str):
             non_trump_cards.sort(key=lambda card: int(card.split('|')[0]))
             lowest = non_trump_cards[0]
             lowest_suit = non_trump_cards[0].split('|')[1]
+            lowest_value = non_trump_cards[0].split('|')[0]
             if suit_dict[lowest_suit] > 1:
-                attacking_cards.append(lowest)
+                attacking_cards.extend(value_dict[lowest_value])
             else:
                 # Check if there are multiple non-trump cards with the same value
                 for value, cards in value_dict.items():
@@ -115,14 +115,14 @@ def find_consolidations(hand: list[str], trump_suit: str, attacking_cards: list[
     
     for card in hand:
         value, suit = card.split('|')
-        if value in attacking_values and suit != trump_suit:
+        if value in attacking_values and suit != trump_suit and int(value) < 12:
             consolidation_cards.append(card)
     
     return consolidation_cards
 
 if __name__ == '__main__':
-    hand = ['3|S', '4|D', '4|C', '5|C', '6|D', '8|S']
-    trump = 'S'
+    hand = ['6|C', '12|S', '12|H', '12|C', '4|H', '1|S']
+    trump = 'C'
     x = find_attacking_cards(hand, trump)
     print(x)
 
