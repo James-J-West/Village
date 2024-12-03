@@ -31,17 +31,27 @@ class Game:
             c_cards = p.consolidate(self.active_cards)
             self.active_cards.extend(c_cards)
             a_c.extend(c_cards)
+        
         defense = defending_player.defend(a_c)
-        if defense:
+        while defense:
             type = defense[0]
             def_response = defense[1]
             print(type, def_response)
             if type == 'DEFENSE':
                 def_cards = list(def_response.values())
                 self.active_cards.extend(def_cards)
-            if type == 'PASS ON':
+                # Loop for other players to consolidate after defense
+                for p in rest_of_players:
+                    c_cards = p.consolidate(def_cards)
+                    self.active_cards.extend(c_cards)
+                    def_cards.extend(c_cards)
+                # Defending player needs to defend again after consolidation
+                defense = defending_player.defend(def_cards)
+            elif type == 'PASS ON':
                 def_card = list(def_response.values())[0]
                 self.active_cards.extend(def_card)
+                break
+        
         print(self.active_cards)
         
 
